@@ -6,6 +6,7 @@
 from io import StringIO
 from datetime import datetime
 
+import math
 import re
 import requests
 import pandas as pd
@@ -417,16 +418,24 @@ ecb_data = fetch_ecb_aaa_spot_curve(selected_date)
 
 actual_date_used = ecb_data["DATE"].iloc[0].strftime("%Y-%m-%d")
 maturities = ecb_data["MATURITY"].tolist()
-spot_rates_pct = ecb_data["RATE"].tolist()
-spot_rates = [x / 100 for x in spot_rates_pct]
+spot_rates_cc_pct = ecb_data["RATE"].tolist()
+spot_rates_cc = [x / 100 for x in spot_rates_cc_pct]
+
+# The ECB dataset uses continuous compounding (SV_C_YM).
+# Convert to semi-annual compounding for use in all formulas:
+# (1 + s_sa / m)^m = e^{s_cc}  =>  s_sa = m * (exp(s_cc / m) - 1)
+spot_rates = [m * (math.exp(r / m) - 1) for r in spot_rates_cc]
+spot_rates_pct = [r * 100 for r in spot_rates]
 
 print_section("ECB DATA EXTRACTED")
 print(f"Target date requested : {selected_date}")
 print(f"Actual ECB date used  : {actual_date_used}")
 print(f"Bond category         : {bond_category}")
-print("\nExtracted spot rates from the ECB:")
-for mat, code, rate in zip(ecb_data["MATURITY"], ecb_data["SERIES_CODE"], ecb_data["RATE"]):
-    print(f"Maturity {mat:>3.1f} years | Series {code:<8} | Spot yield = {rate:.6f}%")
+print(f"\nNote: ECB rates use continuous compounding (SV_C_YM).")
+print("They have been converted to semi-annual compounding for all calculations.\n")
+print("Extracted and converted spot rates:")
+for mat, code, rate_cc, rate_sa in zip(ecb_data["MATURITY"], ecb_data["SERIES_CODE"], spot_rates_cc_pct, spot_rates_pct):
+    print(f"Maturity {mat:>3.1f} years | Series {code:<8} | CC yield = {rate_cc:.6f}% | Semi-annual yield = {rate_sa:.6f}%")
 
 ecb_data.to_csv("ecb_aaa_spot_curve_selected_date.csv", index=False)
 
@@ -912,7 +921,7 @@ print("Instrument risk profiles:")
 print(q11_instruments_table.to_string(index=False))
 
 # 11a) DV01 hedge with bond 1
-hedge_value_dv01 = open_position_value * open_profile["dv01"] / hedge_1_profile["dv01"]
+hedge_value_dv01 = -(open_position_value * open_profile["dv01"] / hedge_1_profile["dv01"])
 
 # 11b) Duration hedge with bond 2
 hedge_value_duration = - (open_profile["duration"] * open_position_value) / hedge_2_profile["duration"]
@@ -920,11 +929,11 @@ hedge_value_duration = - (open_profile["duration"] * open_position_value) / hedg
 # 11c) Duration-convexity hedge with both bonds
 a11 = hedge_1_profile["duration"]
 a12 = hedge_2_profile["duration"]
-b1 = open_position_value * open_profile["duration"]
+b1 = -(open_position_value * open_profile["duration"])
 
 a21 = hedge_1_profile["convexity"]
 a22 = hedge_2_profile["convexity"]
-b2 = open_position_value * open_profile["convexity"]
+b2 = -(open_position_value * open_profile["convexity"])
 
 det = a11 * a22 - a12 * a21
 if abs(det) < 1e-14:
@@ -936,7 +945,7 @@ Vh2 = (a11 * b2 - b1 * a21) / det
 q11a_table = pd.DataFrame([
     {"metric": "Open position market value (EUR)", "value": open_position_value},
     {"metric": "Required hedge value using DV01 (EUR)", "value": hedge_value_dv01},
-    {"metric": "Recommended position", "value": "SHORT hedge bond 1"},
+    {"metric": "Recommended position", "value": "SHORT hedge bond 1" if hedge_value_dv01 < 0 else "LONG hedge bond 1"},
 ])
 
 q11b_table = pd.DataFrame([
