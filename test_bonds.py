@@ -231,9 +231,9 @@ class TestHedging:
         hedge_value = -(v_open * dv01_open / dv01_hedge)
         assert hedge_value < 0
 
-    def test_duration_convexity_hedge_neutralises(self):
+    def test_duration_convexity_hedge_neutralizes(self):
         """
-        The duration-convexity hedge should neutralise the portfolio.
+        The duration-convexity hedge should neutralize the portfolio.
         D_open * V_open + D_h1 * V_h1 + D_h2 * V_h2 = 0
         C_open * V_open + C_h1 * V_h1 + C_h2 * V_h2 = 0
         """
@@ -258,9 +258,9 @@ class TestHedging:
         assert total_duration == pytest.approx(0.0, abs=1e-6)
         assert total_convexity == pytest.approx(0.0, abs=1e-6)
 
-    def test_wrong_sign_does_not_neutralise(self):
+    def test_wrong_sign_does_not_neutralize(self):
         """
-        Verify that without negative signs, the system does NOT neutralise.
+        Verify that without negative signs, the system does NOT neutralize.
         This confirms the bug we fixed.
         """
         D_open, C_open = 2.9, 10.5
